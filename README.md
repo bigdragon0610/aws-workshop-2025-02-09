@@ -209,3 +209,49 @@ AWSで動かす準備は以下の通りです。
   - コンテナイメージとして作成 (名前は`axum-lambda-sample`)
   - ECRのURIを指定
   - 関数URLを作成
+
+## リバースプロキシ
+
+- VPCの作成
+  - VPCなど
+  - 名前: `lambda-dispatcher-sample`
+- EC2を2つ起動
+  - `lambda-dispatcher-sample-instance-1` & `lambda-dispatcher-sample-instance-2`
+  - キーペアなし
+  - セキュリティグループは80番ポートを開ける
+  - ユーザーデータ
+    ```bash
+    sudo yum -y install httpd
+    sudo systemctl enable httpd
+    sudo systemctl start httpd
+    echo "<h1>Server: $(hostname)</h1>" > /var/www/html/index.html
+    chown apache.apache /var/www/html/index.html
+    ```
+  - パブリックIPをもたせる
+- Lambdaを作成
+  - 1から作成
+  - 名前: `lambda-dispatcher-sample`
+  - 関数URLを有効化
+  - honoを使ってソースコードを作成
+    ```bash
+    npm create hono@latest lambda-dispatcher-sample
+    ```
+  - `package.json`の`scripts` > `update`のLambda関数名を`lambda-dispatcher-sample`に変更
+  - `index.ts`を以下のように書き換え
+    ```ts
+    import { Hono } from 'hono'
+    import { handle } from 'hono/aws-lambda'
+
+    const app = new Hono()
+
+    app.all('/:ip', async (c) => {
+      const ip = c.req.param('ip')
+      const newUrl = new URL(`http://${ip}`)
+      const newRequest = new Request(newUrl)
+      const response = await fetch(newRequest)
+      return response
+    })
+
+    export const handler = handle(app)
+    ```
+- `関数URL/{EC2のIP}`でアクセスしてみる

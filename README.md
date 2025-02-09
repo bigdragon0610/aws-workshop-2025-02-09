@@ -147,3 +147,65 @@ ECR上でこのようになっていればOKです。
 ![](/images/2025-02-09-14-45-29.png)
 
 最後に、関数URLを作成してテストしてみましょう。内容は最初のLambdaと同じです。
+
+## Lambda Web Adapter
+
+ここまで作成してきたLambdaは、すべて`handler`がエントリーポイントとして存在することを期待していました。
+
+[Lambda Web Adapter](https://github.com/awslabs/aws-lambda-web-adapter)を使うと、HTTPを話すどんなWebフレームワークでもLambdaとしてデプロイできます！
+
+### Next.js
+
+試しにNext.jsのApp RouterをLambdaにデプロイしてみます。
+
+手順は以下の記事に従って進めてください。
+
+[Next.js を Lambda に最速でデプロイする](https://blog.bigdragon.tech/articles/nextjs-deploy-to-lambda-fast)
+
+### Rust + Docker
+
+Next.jsは若干ネタ性が強いので、次にRustを使ってLambdaを作成してみます。
+
+ソースコードは `axum-lambda-sample` ディレクトリにあります。
+
+まずはローカルで動かしてみましょう。
+
+```bash
+docker compose up -d
+docker compose exec app cargo run
+```
+
+このサンプルでは、2つのエンドポイントが用意されています。
+
+- http://localhost:8080/
+  - `Hello, World!`が返ってくる
+- http://localhost:8080/{name}
+  - `{name}`に入力された文字列によって、`Hello, {name}!`が返ってくる
+
+どちらもcurlやブラウザなどでアクセスしてみてください。
+
+![](/images/2025-02-09-15-49-55.png)
+![](/images/2025-02-09-15-50-14.png)
+
+現状`Dockerfile`に書かれた設定でRustが動いていますが、Lambdaで動かす際には`Dockerfile.aws`を使うことにします。
+
+`Dockerfile.aws`を読むと、以下のようにLambda Web Adapterを使っていることがわかります。
+
+```Dockerfile
+COPY --from=public.ecr.aws/awsguru/aws-lambda-adapter:0.9.0 /lambda-adapter /opt/extensions/lambda-adapter
+```
+
+このように1行追加するだけで、ECSなどで動くコンテナイメージと互換性を保ったまま、Lambdaにデプロイできるようになります！
+
+AWSで動かす準備は以下の通りです。
+
+- ECRにプライベートリポジトリを作成
+  - 名前は`axum-lambda-sample`とします
+- ローカルでイメージをビルド
+  - `Dockerfile.aws`を使うため、`axum-lambda-sample`ディレクトリで以下のコマンドを実行してください
+  - → `docker build -f docker/app/Dockerfile.aws --platform linux/amd64  -t axum-lambda-sample .`
+- ECRにプッシュ
+- Lambdaを作成
+  - コンテナイメージとして作成 (名前は`axum-lambda-sample`)
+  - ECRのURIを指定
+  - 関数URLを作成
